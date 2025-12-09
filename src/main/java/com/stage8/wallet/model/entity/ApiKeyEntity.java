@@ -31,6 +31,7 @@ public class ApiKeyEntity {
 
 
     @Column(nullable = false)
+    @Builder.Default
     private boolean revoked = false;
 
     @Column(nullable = false, updatable = false)

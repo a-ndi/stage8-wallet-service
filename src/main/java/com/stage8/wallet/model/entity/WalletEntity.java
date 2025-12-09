@@ -3,13 +3,16 @@ package com.stage8.wallet.model.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import org.apache.catalina.User;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
 @Entity
-@Builder
+@Data
+@NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class WalletEntity {
 
     @Id
@@ -17,9 +20,10 @@ public class WalletEntity {
     private Long id;
 
     @OneToOne
-    private User user;
+    private UserEntity user;
 
     private String walletNumber;
 
+    @Builder.Default
     private BigDecimal balance = BigDecimal.ZERO;
 }

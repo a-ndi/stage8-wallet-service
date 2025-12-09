@@ -1,6 +1,5 @@
-package com.stage8.wallet.utility;
+package com.stage8.wallet.security;
 
-import com.stage8.wallet.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,3 +32,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+
