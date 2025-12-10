@@ -1,7 +1,9 @@
 package com.stage8.wallet.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.stage8.wallet.model.entity.UserEntity;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.Collections;
 
@@ -21,15 +24,39 @@ public class GoogleOAuthService {
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final GoogleIdTokenVerifier verifier;
+    private final String clientId;
+    private final String clientSecret;
+    private final String redirectUri;
 
     public GoogleOAuthService(UserRepository userRepository, 
                               WalletRepository walletRepository,
-                              @Value("${google.oauth.client-id}") String clientId) {
+                              @Value("${google.oauth.client-id}") String clientId,
+                              @Value("${google.oauth.client-secret}") String clientSecret,
+                              @Value("${google.oauth.redirect-uri}") String redirectUri) {
         this.userRepository = userRepository;
         this.walletRepository = walletRepository;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.redirectUri = redirectUri;
         this.verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                 .setAudience(Collections.singletonList(clientId))
                 .build();
+    }
+
+    /**
+     * Exchanges authorization code for ID token
+     */
+    public String exchangeCodeForIdToken(String authorizationCode) throws IOException {
+        GoogleTokenResponse tokenResponse = new GoogleAuthorizationCodeTokenRequest(
+                new NetHttpTransport(),
+                new GsonFactory(),
+                clientId,
+                clientSecret,
+                authorizationCode,
+                redirectUri
+        ).execute();
+
+        return tokenResponse.getIdToken();
     }
 
     //Verifies Google ID token and returns user information

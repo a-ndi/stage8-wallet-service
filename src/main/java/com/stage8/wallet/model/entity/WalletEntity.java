@@ -6,8 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
-
 @Entity
 @Data
 @NoArgsConstructor
@@ -24,6 +22,9 @@ public class WalletEntity {
 
     private String walletNumber;
 
+    /**
+     * Balance in kobo (integer)
+     */
     @Builder.Default
-    private BigDecimal balance = BigDecimal.ZERO;
+    private Long balance = 0L;
 }

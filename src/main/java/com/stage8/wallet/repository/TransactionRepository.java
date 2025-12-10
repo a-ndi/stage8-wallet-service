@@ -9,5 +9,5 @@ import java.util.Optional;
 public interface TransactionRepository extends JpaRepository<TransactionEntity , Long> {
 
     Optional<TransactionEntity> findByReference(String reference);
-    List<TransactionEntity> findByUserId(Long userId);
+    List<TransactionEntity> findByUser_Id(Long userId);
 }

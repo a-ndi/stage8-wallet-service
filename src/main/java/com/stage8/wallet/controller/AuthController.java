@@ -1,40 +1,126 @@
 package com.stage8.wallet.controller;
 
-import com.nimbusds.jwt.JWT;
 import com.stage8.wallet.dto.AuthResponse;
 import com.stage8.wallet.model.entity.UserEntity;
 import com.stage8.wallet.model.entity.WalletEntity;
 import com.stage8.wallet.repository.WalletRepository;
 import com.stage8.wallet.security.JwtService;
 import com.stage8.wallet.service.GoogleOAuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication", description = "Google OAuth authentication endpoints")
 public class AuthController {
 
     private final GoogleOAuthService googleOAuthService;
     private final JwtService jwtService;
     private final WalletRepository walletRepository;
 
+    @Value("${google.oauth.client-id}")
+    private String clientId;
 
-     //Google OAuth callback endpoint
-     //Verifies Google token, creates user/wallet if needed, and returns JWT
+    @Value("${google.oauth.redirect-uri}")
+    private String redirectUri;
 
-    @PostMapping("/google/callback")
-    public ResponseEntity<AuthResponse> googleCallback(@RequestBody Map<String, String> request) {
+    @Operation(
+            summary = "Initiate Google OAuth Sign-In",
+            description = "Redirects user to Google OAuth consent screen. After user authorizes, Google redirects to /auth/google/callback"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "302", description = "Redirect to Google OAuth consent screen")
+    })
+    @GetMapping("/google")
+    public void googleSignIn(HttpServletResponse response) throws IOException {
+        // Generate state for CSRF protection
+        SecureRandom random = new SecureRandom();
+        byte[] stateBytes = new byte[32];
+        random.nextBytes(stateBytes);
+        String state = Base64.getUrlEncoder().withoutPadding().encodeToString(stateBytes);
+
+        // Store state in session (in production, use Redis or similar)
+        // For now, we'll include it in the redirect and validate in callback
+
+        // Build Google OAuth authorization URL
+        String googleAuthUrl = String.format(
+                "https://accounts.google.com/o/oauth2/v2/auth?" +
+                        "client_id=%s&" +
+                        "redirect_uri=%s&" +
+                        "response_type=code&" +
+                        "scope=openid%%20email%%20profile&" +
+                        "access_type=online&" +
+                        "state=%s",
+                URLEncoder.encode(clientId, StandardCharsets.UTF_8),
+                URLEncoder.encode(redirectUri, StandardCharsets.UTF_8),
+                URLEncoder.encode(state, StandardCharsets.UTF_8)
+        );
+
+        // Redirect to Google OAuth consent screen
+        response.sendRedirect(googleAuthUrl);
+    }
+
+    @Operation(
+            summary = "Google OAuth Callback",
+            description = "Handles Google OAuth callback. Verifies token, creates user if not exists, creates wallet for new users, and returns JWT token."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Authentication successful",
+                    content = @Content(schema = @Schema(implementation = AuthResponse.class))
+            ),
+            @ApiResponse(responseCode = "400", description = "Invalid request (missing code)"),
+            @ApiResponse(responseCode = "401", description = "Authentication failed")
+    })
+    @GetMapping("/google/callback")
+    public ResponseEntity<AuthResponse> googleCallback(
+            @Parameter(description = "Authorization code from Google", required = false)
+            @RequestParam(required = false) String code,
+            @Parameter(description = "Error code from Google OAuth", required = false)
+            @RequestParam(required = false) String error,
+            @Parameter(description = "State parameter for CSRF protection", required = false)
+            @RequestParam(required = false) String state
+    ) {
         try {
-            String idToken = request.get("idToken");
-            if (idToken == null || idToken.isEmpty()) {
-                return ResponseEntity.badRequest().build();
+            // Check for OAuth errors
+            if (error != null) {
+                return ResponseEntity.status(401)
+                        .body(AuthResponse.builder()
+                                .token(null)
+                                .build());
             }
 
-            // Verify Google token
+            // Validate authorization code
+            if (code == null || code.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(AuthResponse.builder()
+                                .token(null)
+                                .build());
+            }
+
+            // Exchange authorization code for ID token
+            String idToken = googleOAuthService.exchangeCodeForIdToken(code);
+
+            // Verify Google token and get user info
             GoogleOAuthService.GoogleUserInfo googleUserInfo = googleOAuthService.verifyToken(idToken);
 
             // Create or retrieve user, create wallet if new
@@ -62,16 +148,11 @@ public class AuthController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            return ResponseEntity.status(401).build();
+            return ResponseEntity.status(401)
+                    .body(AuthResponse.builder()
+                            .token(null)
+                            .build());
         }
-    }
-
-
-     //Health check endpoint
-
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        return ResponseEntity.ok(Map.of("status", "ok"));
     }
 }
 

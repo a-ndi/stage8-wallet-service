@@ -9,7 +9,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -34,7 +33,10 @@ public class TransactionEntity {
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
 
-    private BigDecimal amount;
+    /**
+     * Amount in kobo (integer)
+     */
+    private Long amount;
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
