@@ -41,15 +41,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             subject,
                             null,
-                            null // You can add authorities here if needed
+                            null
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
         } catch (Exception e) {
-            // Log error if needed
-            // Invalid token, continue without authentication
+            System.out.println("Error setting details " + e);
         }
 
         filterChain.doFilter(request, response);

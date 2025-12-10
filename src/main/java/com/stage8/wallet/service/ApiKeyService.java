@@ -73,7 +73,9 @@ public class ApiKeyService {
     }
 
     /**
-     * Parses expiry string (1H, 1D, 1M, 1Y) and converts to Instant
+     * Parses expiry string and converts to Instant
+     * Supports formats: {number}H (hours), {number}D (days), {number}M (months), {number}Y (years)
+     * Examples: 1H, 2H, 24H, 7D, 30D, 6M, 1Y, 2Y
      */
     private Instant parseExpiry(String expiry) {
         if (expiry == null || expiry.trim().isEmpty()) {
@@ -83,12 +85,26 @@ public class ApiKeyService {
         expiry = expiry.trim().toUpperCase();
         Instant now = Instant.now();
 
-        return switch (expiry) {
-            case "1H" -> now.plus(1, ChronoUnit.HOURS);
-            case "1D" -> now.plus(1, ChronoUnit.DAYS);
-            case "1M" -> now.plus(1, ChronoUnit.MONTHS);
-            case "1Y" -> now.plus(1, ChronoUnit.YEARS);
-            default -> throw new IllegalArgumentException("Expiry must be one of: 1H, 1D, 1M, 1Y");
+        // Parse format: number followed by unit (H, D, M, Y)
+        if (!expiry.matches("^\\d+[HDMY]$")) {
+            throw new IllegalArgumentException("Expiry must be in format: {number}H, {number}D, {number}M, or {number}Y (e.g., 2H, 7D, 6M, 1Y)");
+        }
+
+        // Extract number and unit
+        int value = Integer.parseInt(expiry.substring(0, expiry.length() - 1));
+        char unit = expiry.charAt(expiry.length() - 1);
+
+        // Validate value is positive
+        if (value <= 0) {
+            throw new IllegalArgumentException("Expiry value must be a positive number");
+        }
+
+        return switch (unit) {
+            case 'H' -> now.plus(value, ChronoUnit.HOURS);
+            case 'D' -> now.plus(value, ChronoUnit.DAYS);
+            case 'M' -> now.plus(value * 30L, ChronoUnit.DAYS); // Approximate months as 30 days
+            case 'Y' -> now.plus(value * 365L, ChronoUnit.DAYS); // Approximate years as 365 days
+            default -> throw new IllegalArgumentException("Expiry unit must be H (hours), D (days), M (months), or Y (years)");
         };
     }
 
@@ -203,6 +219,41 @@ public class ApiKeyService {
         apiKeyRepository.save(oldApiKeyEntity);
 
         return new CreateApiKeyResult(plainApiKey, newApiKeyEntity);
+    }
+
+    /**
+     * Gets all API keys for a user (both active and revoked)
+     */
+    public List<ApiKeyEntity> getApiKeysForUser(Long userId) {
+        return apiKeyRepository.findByOwnerId(userId);
+    }
+
+    /**
+     * Gets only active (non-revoked) API keys for a user
+     */
+    public List<ApiKeyEntity> getActiveApiKeysForUser(Long userId) {
+        return apiKeyRepository.findByOwnerIdAndRevokedFalse(userId);
+    }
+
+    /**
+     * Revokes an API key by ID
+     */
+    @Transactional
+    public void revokeApiKey(Long keyId, Long userId) {
+        ApiKeyEntity apiKey = apiKeyRepository.findById(keyId)
+                .orElseThrow(() -> new IllegalArgumentException("API key not found"));
+        
+        // Verify ownership
+        if (!apiKey.getOwner().getId().equals(userId)) {
+            throw new IllegalArgumentException("API key not found");
+        }
+        
+        if (apiKey.isRevoked()) {
+            throw new IllegalStateException("API key is already revoked");
+        }
+        
+        apiKey.setRevoked(true);
+        apiKeyRepository.save(apiKey);
     }
 
     /**

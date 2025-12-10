@@ -1,8 +1,10 @@
 package com.stage8.wallet.controller;
 
+import com.stage8.wallet.dto.ApiKeyResponse;
 import com.stage8.wallet.dto.CreateApiKeyRequest;
 import com.stage8.wallet.dto.CreateApiKeyResponse;
 import com.stage8.wallet.dto.RolloverApiKeyRequest;
+import com.stage8.wallet.model.entity.ApiKeyEntity;
 import com.stage8.wallet.model.entity.UserEntity;
 import com.stage8.wallet.repository.UserRepository;
 import com.stage8.wallet.service.ApiKeyService;
@@ -21,7 +23,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/keys")
@@ -31,6 +36,84 @@ public class ApiKeyController {
 
     private final ApiKeyService apiKeyService;
     private final UserRepository userRepository;
+
+    @Operation(
+            summary = "Get All API Keys",
+            description = "Retrieves all API keys for the authenticated user, including active, expired, and revoked keys.",
+            security = @SecurityRequirement(name = "Bearer Authentication")
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "API keys retrieved successfully"
+            ),
+            @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @GetMapping
+    public ResponseEntity<?> getApiKeys() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Long userId = Long.parseLong(authentication.getName());
+            List<ApiKeyEntity> apiKeys = apiKeyService.getApiKeysForUser(userId);
+
+            List<ApiKeyResponse> response = apiKeys.stream()
+                    .map(key -> ApiKeyResponse.builder()
+                            .id(key.getId())
+                            .name(key.getName())
+                            .permissions(key.getPermissions())
+                            .expiresAt(key.getExpiresAt())
+                            .createdAt(key.getCreatedAt())
+                            .expired(key.getExpiresAt() != null && key.getExpiresAt().isBefore(Instant.now()))
+                            .revoked(key.isRevoked())
+                            .build())
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to retrieve API keys: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+            summary = "Revoke API Key",
+            description = "Revokes an API key by ID. Once revoked, the key can no longer be used for authentication.",
+            security = @SecurityRequirement(name = "Bearer Authentication")
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "API key revoked successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request (key not found or already revoked)"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> revokeApiKey(@PathVariable Long id) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Long userId = Long.parseLong(authentication.getName());
+            apiKeyService.revokeApiKey(id, userId);
+
+            return ResponseEntity.ok(Map.of("message", "API key revoked successfully"));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to revoke API key: " + e.getMessage()));
+        }
+    }
 
     @Operation(
             summary = "Create API Key",

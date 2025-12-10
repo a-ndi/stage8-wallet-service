@@ -1,5 +1,6 @@
 package com.stage8.wallet.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +16,7 @@ import lombok.NoArgsConstructor;
 public class TransferRequest {
     
     @NotBlank(message = "Wallet number is required")
+    @JsonProperty("wallet_number")
     private String walletNumber;
     
     /**

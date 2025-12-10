@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface ApiKeyRepository extends JpaRepository<ApiKeyEntity, Long> {
 
+    List<ApiKeyEntity> findByOwnerId(Long ownerId);
     List<ApiKeyEntity> findByOwnerIdAndRevokedFalse(Long ownerId);
     Optional<ApiKeyEntity> findByKeyHash(String keyHash);
 }

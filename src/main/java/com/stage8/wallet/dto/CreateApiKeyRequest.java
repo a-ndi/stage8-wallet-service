@@ -21,7 +21,7 @@ public class CreateApiKeyRequest {
     private String name;
     
     @NotBlank(message = "Expiry is required")
-    @Pattern(regexp = "^(1H|1D|1M|1Y)$", message = "Expiry must be one of: 1H, 1D, 1M, 1Y")
+    @Pattern(regexp = "^\\d+[HDMYhdmy]$", message = "Expiry must be in format: {number}H, {number}D, {number}M, or {number}Y (e.g., 2H, 7D, 6M, 1Y)")
     private String expiry;
     
     @NotEmpty(message = "At least one permission is required")

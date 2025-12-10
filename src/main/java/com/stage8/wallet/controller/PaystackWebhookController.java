@@ -38,7 +38,7 @@ public class PaystackWebhookController {
             @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid Paystack signature")
     })
     @PostMapping("/webhook")
-    public ResponseEntity<Map<String, Boolean>> paystackWebhook(
+    public ResponseEntity<?> paystackWebhook(
             HttpServletRequest request) {
         try {
             // Read request body as string for signature validation
@@ -46,18 +46,29 @@ public class PaystackWebhookController {
                     request.getInputStream(), 
                     StandardCharsets.UTF_8
             );
+            
+            // DEBUG: Log the incoming payload
+            System.out.println("=== WEBHOOK RECEIVED ===");
+            System.out.println("Payload: " + payload);
 
             // Get Paystack signature from header
             String signature = request.getHeader("x-paystack-signature");
+            System.out.println("Signature: " + (signature != null ? signature.substring(0, Math.min(20, signature.length())) + "..." : "NULL"));
+            
             if (signature == null || signature.isEmpty()) {
+                System.out.println("ERROR: No signature provided");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("status", false));
+                        .body(Map.of("status", false, "error", "No signature"));
             }
 
             // Validate signature
-            if (!paystackWebhookService.validateSignature(payload, signature)) {
+            boolean signatureValid = paystackWebhookService.validateSignature(payload, signature);
+            System.out.println("Signature valid: " + signatureValid);
+            
+            if (!signatureValid) {
+                System.out.println("ERROR: Invalid signature");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("status", false));
+                        .body(Map.of("status", false, "error", "Invalid signature"));
             }
 
             // Parse webhook payload
@@ -69,26 +80,35 @@ public class PaystackWebhookController {
 
             // Only process charge.success and charge.failed events
             if (webhookPayload.getData() == null || webhookPayload.getData().getReference() == null) {
+                System.out.println("No data or reference in payload");
                 return ResponseEntity.ok(Map.of("status", true));
             }
 
             String event = webhookPayload.getEvent();
             String reference = webhookPayload.getData().getReference();
             String status = webhookPayload.getData().getStatus();
-            Long amountInKobo = webhookPayload.getData().getAmount(); // Amount from Paystack is in kobo
+            Long amountInKobo = webhookPayload.getData().getAmount();
+            
+            System.out.println("Event: " + event);
+            System.out.println("Reference: " + reference);
+            System.out.println("Status: " + status);
+            System.out.println("Amount: " + amountInKobo);
 
             // Process only charge events
             if (event != null && (event.equals("charge.success") || event.equals("charge.failed"))) {
-                // Process webhook event (updates transaction and wallet balance)
-                // Pass amount in kobo to ensure correct amount is stored
+                System.out.println("Processing webhook event...");
                 paystackWebhookService.processWebhookEvent(reference, status, amountInKobo);
+                System.out.println("Webhook processed successfully!");
             }
 
             return ResponseEntity.ok(Map.of("status", true));
 
         } catch (Exception e) {
-            // Log error but return success to Paystack (to prevent retries for invalid requests)
-            return ResponseEntity.ok(Map.of("status", true));
+            System.err.println("=== WEBHOOK ERROR ===");
+            System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("status", false, "error", e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
     }
 }
