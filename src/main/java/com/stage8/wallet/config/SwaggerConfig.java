@@ -7,16 +7,40 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
 public class SwaggerConfig {
 
+    @Value("${RAILWAY_PUBLIC_DOMAIN:}")
+    private String railwayDomain;
+
     @Bean
     public OpenAPI walletServiceOpenAPI() {
+        List<Server> servers = new ArrayList<>();
+        
+        // Add Railway production server if domain is set
+        if (railwayDomain != null && !railwayDomain.isEmpty()) {
+            servers.add(new Server()
+                    .url("https://" + railwayDomain)
+                    .description("Production Server (Railway)"));
+        } else {
+            // Fallback to hardcoded Railway URL
+            servers.add(new Server()
+                    .url("https://walletservice.up.railway.app")
+                    .description("Production Server (Railway)"));
+        }
+        
+        // Add localhost for development
+        servers.add(new Server()
+                .url("http://localhost:8080")
+                .description("Local Development Server"));
+
         return new OpenAPI()
                 .info(new Info()
                         .title("Wallet Service API")
@@ -51,14 +75,7 @@ public class SwaggerConfig {
                         .license(new License()
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
-                .servers(List.of(
-                        new Server()
-                                .url("http://localhost:8080")
-                                .description("Local Development Server"),
-                        new Server()
-                                .url("https://your-app.railway.app")
-                                .description("Production Server (Railway)")
-                ))
+                .servers(servers)
                 .components(new Components()
                         .addSecuritySchemes("Bearer Authentication", new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
